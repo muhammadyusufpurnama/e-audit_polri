@@ -1,3 +1,4 @@
+// app/api/analyze/route.ts
 import { GoogleGenerativeAI } from "@google/generative-ai";
 import Groq from "groq-sdk";
 import { NextRequest, NextResponse } from "next/server";
@@ -38,11 +39,10 @@ function extractLhaResult(text: string): LhaResult {
     .replace(/\n?```\s*$/i, "")
     .trim();
 
-  // Cari object { ... }
   let start = cleaned.indexOf("{");
   let end = cleaned.lastIndexOf("}");
 
-  // Kalau tidak ada object, cari array [ ... ] (fallback)
+  // Fallback: cari array [ ... ]
   if (start === -1 || end === -1 || end < start) {
     const arrStart = cleaned.indexOf("[");
     const arrEnd = cleaned.lastIndexOf("]");
@@ -81,7 +81,7 @@ function extractLhaResult(text: string): LhaResult {
     );
 
     // ==========================================
-    // COBA 2: jsonrepair (library)
+    // COBA 2: jsonrepair
     // ==========================================
     try {
       const repairedStr = jsonrepair(jsonStr);
@@ -103,7 +103,6 @@ function extractLhaResult(text: string): LhaResult {
         if (rowsMatch && rowsMatch.index !== undefined) {
           const rowsStart = jsonStr.indexOf("[", rowsMatch.index);
 
-          // Cari row terakhir yang ditutup sempurna
           let depth = 0;
           let lastCompleteRow = -1;
           for (let i = rowsStart + 1; i < jsonStr.length; i++) {
@@ -132,7 +131,6 @@ function extractLhaResult(text: string): LhaResult {
       }
     }
 
-    // Kalau semua repair gagal
     if (!parsed) {
       throw new Error(
         "JSON.parse gagal setelah semua upaya repair. Error asli: " +
@@ -165,6 +163,38 @@ function extractLhaResult(text: string): LhaResult {
 }
 
 // ==========================================
+// HELPER: Build enriched system prompt dengan peraturan
+// ==========================================
+function enrichSystemPrompt(
+  basePrompt: string,
+  peraturanContext: string,
+  divisiLabel: string
+): string {
+  if (!peraturanContext || !peraturanContext.trim()) {
+    return basePrompt;
+  }
+
+  return (
+    basePrompt +
+    `\n\n==========================================\n` +
+    `PERATURAN & REGULASI REFERENSI — ${divisiLabel.toUpperCase()}\n` +
+    `==========================================\n` +
+    `Gunakan peraturan-peraturan berikut sebagai DASAR UTAMA dalam menentukan ` +
+    `KRITERIA audit. Setiap temuan yang Anda identifikasi HARUS mengacu pada ` +
+    `salah satu peraturan di bawah ini (sebutkan nama/nomor peraturan pada kolom KRITERIA).\n\n` +
+    peraturanContext +
+    `\n\n==========================================\n` +
+    `INSTRUKSI PENTING:\n` +
+    `1. KRITERIA harus mengutip peraturan yang relevan dari daftar di atas.\n` +
+    `2. Jika tidak ada peraturan yang cocok, gunakan prinsip umum good governance.\n` +
+    `3. SEBAB harus menjelaskan mengapa pelanggaran terjadi.\n` +
+    `4. AKIBAT harus menjelaskan dampak nyata dari temuan.\n` +
+    `5. REKOMENDASI harus actionable dan spesifik.\n` +
+    `==========================================\n`
+  );
+}
+
+// ==========================================
 // MAIN HANDLER
 // ==========================================
 export async function POST(req: NextRequest) {
@@ -182,6 +212,8 @@ export async function POST(req: NextRequest) {
     const formData = await req.formData();
     const file = formData.get("file") as File | null;
     const divisi = (formData.get("divisi") as string) || "operasional";
+    const peraturanContext =
+      (formData.get("peraturanContext") as string) || "";
 
     if (!file || typeof file === "string") {
       return NextResponse.json(
@@ -204,7 +236,18 @@ export async function POST(req: NextRequest) {
     }
 
     const divisiLabel = DIVISI_LABEL[divisi] || "Divisi";
-    const systemPrompt = buildSystemPrompt(divisi);
+    const basePrompt = buildSystemPrompt(divisi);
+    const systemPrompt = enrichSystemPrompt(
+      basePrompt,
+      peraturanContext,
+      divisiLabel
+    );
+
+    console.log(
+      `[${divisiLabel}] Peraturan context: ${
+        peraturanContext ? peraturanContext.length + " chars" : "TIDAK ADA"
+      }`
+    );
 
     // ==========================================
     // PERCOBAAN 1: GEMINI

@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   useEffect,
+  useMemo,
   type ElementType,
   type ChangeEvent,
   type FormEvent,
@@ -28,6 +29,8 @@ import {
   Eye,
   Trash2,
   Settings,
+  BookOpen,
+  Info,
 } from "lucide-react";
 import {
   DIVISI_LIST,
@@ -37,6 +40,11 @@ import {
 import { LhaTemplate } from "./LhaTemplate";
 import { generateLhaDocx } from "@/lib/generateDocx";
 import type { BarisTemuan, LhaMetadata } from "@/lib/prompts";
+import {
+  getPeraturanByDivisi,
+  getPeraturanContext,
+  type Peraturan,
+} from "@/lib/peraturanStore";
 
 // ---------- Helper ----------
 function formatBytes(bytes: number): string {
@@ -225,6 +233,74 @@ function FilePreview({
   );
 }
 
+// ---------- Info Peraturan Panel ----------
+function PeraturanInfoPanel({ divisi }: { divisi: DivisiKey }) {
+  const [peraturanList, setPeraturanList] = useState<Peraturan[]>([]);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    setPeraturanList(getPeraturanByDivisi(divisi));
+  }, [divisi]);
+
+  if (peraturanList.length === 0) {
+    return (
+      <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-200 rounded-xl">
+        <Info className="w-4 h-4 text-amber-600 mt-0.5 shrink-0" />
+        <div className="text-xs text-amber-800">
+          <p className="font-semibold">Belum ada peraturan master data</p>
+          <p className="mt-0.5">
+            Analisis akan menggunakan kriteria umum. Hubungi admin untuk
+            menambahkan peraturan divisi ini.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl">
+      <button
+        type="button"
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center justify-between gap-2"
+      >
+        <div className="flex items-center gap-2">
+          <BookOpen className="w-4 h-4 text-indigo-600" />
+          <span className="text-xs font-semibold text-indigo-900">
+            {peraturanList.length} Peraturan Referensi Aktif
+          </span>
+        </div>
+        <span className="text-[10px] text-indigo-600 font-medium">
+          {expanded ? "Sembunyikan" : "Lihat Detail"}
+        </span>
+      </button>
+
+      {expanded && (
+        <div className="mt-3 space-y-2 max-h-48 overflow-y-auto animate-in fade-in slide-in-from-top-2 duration-200">
+          {peraturanList.map((p, i) => (
+            <div
+              key={p.id}
+              className="flex items-start gap-2 p-2 bg-white rounded-lg border border-indigo-100"
+            >
+              <div className="w-5 h-5 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center text-[10px] font-bold shrink-0 mt-0.5">
+                {i + 1}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-gray-900 line-clamp-2">
+                  {p.nama}
+                </p>
+                <p className="text-[10px] text-gray-500 mt-0.5">
+                  {p.nomor} • {p.tahun}
+                </p>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ---------- Props ----------
 interface HomeDashboardProps {
   allowedDivisi: DivisiConfig[];
@@ -242,11 +318,13 @@ export default function HomeDashboard({
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [dragActive, setDragActive] = useState(false);
   const [exportingWord, setExportingWord] = useState(false);
+  const [peraturanCounts, setPeraturanCounts] = useState<
+    Record<string, number>
+  >({});
 
-  // Bangun state awal HANYA untuk divisi yang diizinkan
+  // Build initial states
   const buildInitialStates = (): Record<DivisiKey, DivisiState> => {
     const base: Record<string, DivisiState> = {};
-    // Selalu sediakan 4 slot supaya type-safe, tapi yang diisi hanya yang allowed
     (["operasional", "sdm", "logistik", "keuangan"] as DivisiKey[]).forEach(
       (k) => {
         base[k] = createInitialState();
@@ -276,7 +354,16 @@ export default function HomeDashboard({
   const activeConfig =
     allowedDivisi.find((d) => d.key === activeDivisi) ?? allowedDivisi[0];
 
-  // Safety: kalau activeConfig undefined (harusnya tidak terjadi)
+  // ---------- Load peraturan counts ----------
+  useEffect(() => {
+    const counts: Record<string, number> = {};
+    DIVISI_LIST.forEach((d) => {
+      counts[d.key] = getPeraturanByDivisi(d.key).length;
+    });
+    setPeraturanCounts(counts);
+  }, [activeDivisi]);
+
+  // Safety: kalau activeConfig undefined
   if (!activeConfig) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50">
@@ -365,6 +452,15 @@ export default function HomeDashboard({
       const formData = new FormData();
       formData.append("file", current.file);
       formData.append("divisi", activeDivisi);
+
+      // Inject peraturan context dari localStorage
+      const peraturanContext = getPeraturanContext(activeDivisi);
+      if (peraturanContext) {
+        formData.append("peraturanContext", peraturanContext);
+        console.log(
+          `[${activeDivisi}] Mengirim ${peraturanContext.length} chars peraturan context`
+        );
+      }
 
       const res = await fetch("/api/analyze", {
         method: "POST",
@@ -513,7 +609,7 @@ export default function HomeDashboard({
 
   const resetDivisi = () => updateState(activeDivisi, createInitialState());
 
-  // Statistik (hanya untuk divisi yang diizinkan)
+  // Statistik
   const totalSelesai = allowedDivisi.filter(
     (d) => states[d.key]?.rows.length > 0
   ).length;
@@ -527,6 +623,9 @@ export default function HomeDashboard({
     keuangan: "from-purple-500 to-pink-500",
   };
   const activeGradient = gradientMap[activeDivisi];
+
+  // Peraturan aktif untuk divisi ini
+  const activePeraturanCount = peraturanCounts[activeDivisi] ?? 0;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-blue-50/30 to-purple-50/30 flex">
@@ -621,6 +720,7 @@ export default function HomeDashboard({
             const hasResult = divState.rows.length > 0;
             const hasFile = !!divState.file;
             const gradient = gradientMap[div.key];
+            const peraturanCount = peraturanCounts[div.key] ?? 0;
 
             return (
               <button
@@ -671,6 +771,17 @@ export default function HomeDashboard({
                 )}
                 {hasFile && !hasResult && (
                   <div className="shrink-0 w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
+                )}
+                {!hasFile && !hasResult && peraturanCount > 0 && (
+                  <div
+                    className="shrink-0 flex items-center gap-0.5 px-1.5 py-0.5 rounded-full bg-indigo-500/30 text-indigo-200"
+                    title={`${peraturanCount} peraturan referensi`}
+                  >
+                    <BookOpen className="w-2.5 h-2.5" />
+                    <span className="text-[9px] font-bold">
+                      {peraturanCount}
+                    </span>
+                  </div>
                 )}
               </button>
             );
@@ -732,13 +843,26 @@ export default function HomeDashboard({
                 <p className="text-white/90 text-sm sm:text-base">
                   {activeConfig.deskripsi}
                 </p>
-                <div className="mt-3 inline-flex items-center gap-2 px-3 py-1.5 bg-white/20 backdrop-blur rounded-full text-xs">
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>{activeConfig.contohDokumen}</span>
+                <div className="mt-3 flex flex-wrap gap-2">
+                  <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/20 backdrop-blur rounded-full text-xs">
+                    <FileText className="w-3.5 h-3.5" />
+                    <span>{activeConfig.contohDokumen}</span>
+                  </div>
+                  {activePeraturanCount > 0 && (
+                    <div className="inline-flex items-center gap-2 px-3 py-1.5 bg-white/20 backdrop-blur rounded-full text-xs">
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>
+                        {activePeraturanCount} peraturan referensi
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
           </div>
+
+          {/* Info Peraturan Panel */}
+          <PeraturanInfoPanel divisi={activeDivisi} />
 
           {/* Upload Card */}
           <div className="bg-white p-5 sm:p-6 rounded-2xl shadow-sm border border-gray-100 space-y-4">

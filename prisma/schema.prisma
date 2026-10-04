@@ -1,0 +1,135 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+// ==========================================
+// DIVISIONS
+// ==========================================
+model Division {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique  // operasional, sdm, logistik, keuangan
+  name        String
+  icon        String   @default("Settings")
+  description String   @default("")
+  createdAt   DateTime @default(now())
+
+  regulations Regulation[]
+
+  @@map("divisions")
+}
+
+// ==========================================
+// REGULATIONS
+// ==========================================
+model Regulation {
+  id               Int      @id @default(autoincrement())
+  divisionId       Int
+  regulationType   String   // UU, PP, Perpres, Permen, Perda, Lainnya
+  regulationNumber String
+  year             String
+  title            String
+  status           String   @default("DRAFT") // DRAFT, REVIEW_REQUIRED, APPROVED, REJECTED
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  division    Division    @relation(fields: [divisionId], references: [id], onDelete: Cascade)
+  documents   Document[]
+  norms       Norm[]
+
+  @@index([divisionId])
+  @@index([status])
+  @@map("regulations")
+}
+
+// ==========================================
+// DOCUMENTS
+// ==========================================
+model Document {
+  id            Int      @id @default(autoincrement())
+  regulationId  Int
+  fileName      String
+  filePath      String   @default("")
+  fileType      String
+  fileSize      Int
+  extractedText String   @default("")
+  uploadStatus  String   @default("UPLOADED") // UPLOADED, EXTRACTING, EXTRACTED, FAILED
+  createdAt     DateTime @default(now())
+
+  regulation Regulation @relation(fields: [regulationId], references: [id], onDelete: Cascade)
+
+  @@index([regulationId])
+  @@map("documents")
+}
+
+// ==========================================
+// NORMS
+// ==========================================
+model Norm {
+  id           Int      @id @default(autoincrement())
+  regulationId Int
+  normCode     String   @unique  // NORMA-000001
+  criteria     String              // Dokumen, Waktu, Nilai, Prosedur, dll
+  article      String              // Pasal
+  paragraph    String?             // Ayat (nullable)
+  originalText String              // Teks asli dari peraturan
+  status       String   @default("DRAFT") // DRAFT, REVIEW_REQUIRED, APPROVED, REJECTED
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  regulation Regulation @relation(fields: [regulationId], references: [id], onDelete: Cascade)
+  rules      Rule[]
+
+  @@index([regulationId])
+  @@index([status])
+  @@map("norms")
+}
+
+// ==========================================
+// RULES
+// ==========================================
+model Rule {
+  id                  Int      @id @default(autoincrement())
+  normId              Int
+  ruleCode            String   @unique  // ATURAN-000001
+  maximumValue        Float?
+  operator            String              // =, !=, >, <, >=, <=, IN, NOT IN, CONTAINS
+  parameter           String
+  condition           String
+  inspectionIndicator String
+  minimumValue        Float?
+  unit                String   @default("")
+  textThreshold       String   @default("")
+  numericValue        Float?
+  ruleType            String              // NUMERIC, TEXT, DOCUMENT, DATE, BOOLEAN, PERCENTAGE, CURRENCY
+  status              String   @default("DRAFT")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  norm Norm @relation(fields: [normId], references: [id], onDelete: Cascade)
+
+  @@index([normId])
+  @@index([status])
+  @@map("rules")
+}
+
+// ==========================================
+// AUDIT LOGS
+// ==========================================
+model AuditLog {
+  id          Int      @id @default(autoincrement())
+  userId      String   @default("system")
+  action      String   // UPLOAD, ANALYZE, EDIT, APPROVE, REJECT, DELETE, LOGIN
+  targetType  String   // REGULATION, NORM, RULE, DOCUMENT
+  targetId    String   @default("")
+  description String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@index([action])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
