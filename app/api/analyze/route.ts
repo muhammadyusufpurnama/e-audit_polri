@@ -342,7 +342,7 @@ export async function POST(req: NextRequest) {
             content: `Berikut teks dokumen yang harus dianalisis:\n\n${extractedText}\n\nIngat: keluarkan HANYA JSON object dengan key "metadata" dan "rows". MAKSIMUM 5 temuan. RINGKAS.`,
           },
         ],
-        model: "openai/gpt-oss-120b",
+        model: "llama3-70b-8192", // <- Disamakan menggunakan versi ini
         temperature: 0.2,
         max_tokens: 6000,
       });

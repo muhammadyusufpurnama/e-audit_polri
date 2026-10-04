@@ -23,12 +23,12 @@ const REGULATION_TYPES = [
 ];
 
 const ANALYSIS_STEPS = [
-  "Uploading document...",
-  "Extracting text...",
-  "Detecting legal structure...",
-  "Extracting norms...",
-  "Generating audit rules...",
-  "Validating result...",
+  "Mengunggah dokumen peraturan...",
+  "Mengekstrak teks & membersihkan data...",
+  "Memecah dokumen per section (chunking)...",
+  "Menganalisis norma & aturan via AI (Groq)...",
+  "Memvalidasi hasil ekstraksi audit...",
+  "Menyimpan ke master data peraturan...",
 ];
 
 interface Props {
@@ -60,11 +60,11 @@ export default function UploadForm({
   const handleFile = (f: File) => {
     const ext = f.name.toLowerCase().split(".").pop();
     if (!["pdf", "doc", "docx"].includes(ext ?? "")) {
-      setError("Format harus PDF, DOC, atau DOCX");
+      setError("Format file harus PDF, DOC, atau DOCX");
       return;
     }
-    if (f.size > 20 * 1024 * 1024) {
-      setError("File terlalu besar (max 20MB)");
+    if (f.size > 25 * 1024 * 1024) {
+      setError("File terlalu besar (maksimal 25MB)");
       return;
     }
     setFile(f);
@@ -92,17 +92,17 @@ export default function UploadForm({
     setError("");
     setSuccess("");
 
-    if (!file) return setError("Pilih file peraturan");
-    if (!divisionId) return setError("Pilih divisi");
+    if (!file) return setError("Pilih file peraturan terlebih dahulu");
+    if (!divisionId) return setError("Pilih divisi tujuan");
     if (!title.trim()) return setError("Judul peraturan wajib diisi");
 
     setLoading(true);
     setProgressStep(0);
 
-    // Simulasi progress step (visual feedback)
+    // Simulasi kemajuan langkah bertahap untuk dokumen besar (chunking)
     const stepInterval = setInterval(() => {
-      setProgressStep((s) => Math.min(s + 1, ANALYSIS_STEPS.length - 1));
-    }, 1500);
+      setProgressStep((s) => (s < ANALYSIS_STEPS.length - 2 ? s + 1 : s));
+    }, 3000);
 
     try {
       const formData = new FormData();
@@ -120,7 +120,7 @@ export default function UploadForm({
       const data = await res.json();
 
       if (!res.ok) {
-        throw new Error(data.error || "Gagal memproses dokumen");
+        throw new Error(data.error || "Gagal memproses dokumen peraturan");
       }
 
       if (data.aiError) {
@@ -128,15 +128,16 @@ export default function UploadForm({
         return;
       }
 
+      setProgressStep(ANALYSIS_STEPS.length - 1);
       setSuccess(
-        `Analisis selesai! ${data.normsCreated} norma, ${data.rulesCreated} aturan dibuat.`
+        `Analisis selesai! Berhasil mengekstrak ${data.normsCreated} norma dan ${data.rulesCreated} aturan audit.`
       );
 
       setTimeout(() => {
         onSuccess();
-      }, 1500);
+      }, 2000);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Terjadi kesalahan");
+      setError(err instanceof Error ? err.message : "Terjadi kesalahan sistem");
     } finally {
       clearInterval(stepInterval);
       setLoading(false);
@@ -144,7 +145,7 @@ export default function UploadForm({
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-4xl mx-auto">
       <div className="flex items-center gap-3">
         <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-400 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/30">
           <Upload className="w-6 h-6 text-white" />
@@ -152,19 +153,19 @@ export default function UploadForm({
         <div>
           <h1 className="text-2xl font-bold text-white">Upload Peraturan</h1>
           <p className="text-sm text-slate-400">
-            Sistem akan mengekstrak norma & aturan audit secara otomatis
+            Sistem akan memproses dokumen besar secara bertahap & mengekstrak norma audit otomatis
           </p>
         </div>
       </div>
 
       <form
         onSubmit={handleSubmit}
-        className="bg-slate-900/60 border border-slate-800 rounded-2xl p-5 sm:p-6 space-y-5"
+        className="bg-slate-900/60 border border-slate-800 rounded-2xl p-6 sm:p-8 space-y-6 shadow-xl"
       >
         {/* Grid: Divisi + Jenis */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className="block text-sm font-semibold text-slate-300 mb-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">
               Divisi <span className="text-red-400">*</span>
             </label>
             <select
@@ -181,7 +182,7 @@ export default function UploadForm({
           </div>
 
           <div>
-            <label className="block text-sm font-semibold text-slate-300 mb-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">
               Jenis Peraturan <span className="text-red-400">*</span>
             </label>
             <select
@@ -201,26 +202,26 @@ export default function UploadForm({
         {/* Nomor + Tahun */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <div className="sm:col-span-2">
-            <label className="block text-sm font-semibold text-slate-300 mb-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">
               Nomor Peraturan
             </label>
             <input
               type="text"
               value={regulationNumber}
               onChange={(e) => setRegulationNumber(e.target.value)}
-              placeholder="cth: 16"
+              placeholder="cth: 039"
               className="w-full px-4 py-3 rounded-xl bg-slate-950/60 border border-slate-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 outline-none text-white text-sm placeholder:text-slate-600"
             />
           </div>
           <div>
-            <label className="block text-sm font-semibold text-slate-300 mb-2">
+            <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">
               Tahun
             </label>
             <input
               type="text"
               value={year}
               onChange={(e) => setYear(e.target.value)}
-              placeholder="2024"
+              placeholder="2026"
               className="w-full px-4 py-3 rounded-xl bg-slate-950/60 border border-slate-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 outline-none text-white text-sm placeholder:text-slate-600"
             />
           </div>
@@ -228,21 +229,21 @@ export default function UploadForm({
 
         {/* Judul */}
         <div>
-          <label className="block text-sm font-semibold text-slate-300 mb-2">
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">
             Judul Peraturan <span className="text-red-400">*</span>
           </label>
           <input
             type="text"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="cth: Pengadaan Barang/Jasa Pemerintah"
+            placeholder="cth: Standar Biaya Masukan Tahun Anggaran"
             className="w-full px-4 py-3 rounded-xl bg-slate-950/60 border border-slate-700 focus:border-cyan-500 focus:ring-2 focus:ring-cyan-500/20 outline-none text-white text-sm placeholder:text-slate-600"
           />
         </div>
 
         {/* File Dropzone */}
         <div>
-          <label className="block text-sm font-semibold text-slate-300 mb-2">
+          <label className="block text-xs font-bold uppercase tracking-wider text-slate-300 mb-2">
             File Peraturan <span className="text-red-400">*</span>
           </label>
           {!file ? (
@@ -263,7 +264,7 @@ export default function UploadForm({
                 transition-all duration-300
                 ${
                   dragActive
-                    ? "border-cyan-500 bg-cyan-500/10 scale-[1.02]"
+                    ? "border-cyan-500 bg-cyan-500/10 scale-[1.01]"
                     : "border-slate-700 hover:border-cyan-500/50 hover:bg-slate-950/40"
                 }
               `}
@@ -289,12 +290,10 @@ export default function UploadForm({
               </div>
               <div>
                 <p className="text-sm font-semibold text-white">
-                  {dragActive
-                    ? "Lepaskan file di sini"
-                    : "Klik atau seret file ke sini"}
+                  {dragActive ? "Lepaskan file di sini" : "Klik atau seret file PDF / DOCX ke sini"}
                 </p>
                 <p className="text-xs text-slate-500 mt-1">
-                  PDF, DOC, DOCX — Maks 10MB
+                  Mendukung dokumen tebal (otomatis di-chunk per section) — Maks 25MB
                 </p>
               </div>
             </div>
@@ -314,7 +313,8 @@ export default function UploadForm({
               <button
                 type="button"
                 onClick={() => setFile(null)}
-                className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-red-400"
+                className="p-2 rounded-lg hover:bg-slate-800 text-slate-400 hover:text-red-400 transition-colors"
+                disabled={loading}
               >
                 <X className="w-4 h-4" />
               </button>
@@ -322,67 +322,80 @@ export default function UploadForm({
           )}
         </div>
 
-        {/* Progress */}
+        {/* Real-time Progress Bar & Steps */}
         {loading && (
-          <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 space-y-2">
-            {ANALYSIS_STEPS.map((step, i) => (
-              <div key={i} className="flex items-center gap-2 text-xs">
-                {i < progressStep ? (
-                  <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
-                ) : i === progressStep ? (
-                  <Loader2 className="w-4 h-4 text-cyan-400 animate-spin shrink-0" />
-                ) : (
-                  <div className="w-4 h-4 rounded-full border border-slate-700 shrink-0" />
-                )}
-                <span
-                  className={
-                    i <= progressStep ? "text-white" : "text-slate-600"
-                  }
-                >
-                  {step}
-                </span>
-              </div>
-            ))}
-            {progressStep >= ANALYSIS_STEPS.length - 1 && (
-              <div className="pt-2 border-t border-slate-800">
-                <div className="flex items-center gap-2 text-xs font-semibold text-green-400">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Analysis Complete</span>
+          <div className="p-5 rounded-xl bg-slate-950/80 border border-slate-800 space-y-3 animate-in fade-in duration-300">
+            <div className="flex items-center justify-between text-xs font-semibold text-cyan-400">
+              <span className="flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Memproses dokumen besar secara bertahap...
+              </span>
+              <span>Langkah {progressStep + 1} dari {ANALYSIS_STEPS.length}</span>
+            </div>
+
+            {/* Visual Bar */}
+            <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
+              <div
+                className="bg-gradient-to-r from-cyan-500 to-blue-600 h-2 rounded-full transition-all duration-700"
+                style={{
+                  width: `${((progressStep + 1) / ANALYSIS_STEPS.length) * 100}%`,
+                }}
+              />
+            </div>
+
+            {/* Checklist Steps */}
+            <div className="space-y-1.5 pt-2 border-t border-slate-800/60">
+              {ANALYSIS_STEPS.map((step, i) => (
+                <div key={i} className="flex items-center gap-2.5 text-xs">
+                  {i < progressStep ? (
+                    <CheckCircle2 className="w-4 h-4 text-green-400 shrink-0" />
+                  ) : i === progressStep ? (
+                    <Loader2 className="w-4 h-4 text-cyan-400 animate-spin shrink-0" />
+                  ) : (
+                    <div className="w-4 h-4 rounded-full border border-slate-700 shrink-0" />
+                  )}
+                  <span
+                    className={
+                      i <= progressStep ? "text-slate-200 font-medium" : "text-slate-600"
+                    }
+                  >
+                    {step}
+                  </span>
                 </div>
-              </div>
-            )}
+              ))}
+            </div>
           </div>
         )}
 
-        {/* Error / Success */}
+        {/* Error / Success Messages */}
         {error && (
-          <div className="flex items-start gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/30 p-3 rounded-xl">
+          <div className="flex items-start gap-2 text-sm text-red-400 bg-red-500/10 border border-red-500/30 p-3.5 rounded-xl">
             <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
             <span>{error}</span>
           </div>
         )}
         {success && (
-          <div className="flex items-start gap-2 text-sm text-green-400 bg-green-500/10 border border-green-500/30 p-3 rounded-xl">
+          <div className="flex items-start gap-2 text-sm text-green-400 bg-green-500/10 border border-green-500/30 p-3.5 rounded-xl">
             <CheckCircle2 className="w-4 h-4 mt-0.5 shrink-0" />
             <span>{success}</span>
           </div>
         )}
 
-        {/* Submit */}
+        {/* Submit Button */}
         <button
           type="submit"
           disabled={loading || !file}
-          className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 text-white font-semibold py-3.5 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all hover:shadow-lg hover:shadow-cyan-500/30"
+          className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-600 hover:to-blue-700 text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-lg shadow-cyan-500/20"
         >
           {loading ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Menganalisis...</span>
+              <span>Sedang Menganalisis Dokumen...</span>
             </>
           ) : (
             <>
               <Sparkles className="w-5 h-5" />
-              <span>UPLOAD & ANALISIS</span>
+              <span>UPLOAD & ANALISIS PERATURAN</span>
             </>
           )}
         </button>

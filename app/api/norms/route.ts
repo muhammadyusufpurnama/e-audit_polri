@@ -1,17 +1,17 @@
+// app/api/norms/route.ts
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "../../../lib/prisma";
+import { prisma } from "@/lib/prisma";
 
 export async function GET(req: NextRequest) {
   try {
     const { searchParams } = new URL(req.url);
-    const status = searchParams.get("status"); // DRAFT, REVIEW_REQUIRED, APPROVED
+    const status = searchParams.get("status");
     const regulationId = searchParams.get("regulationId");
     const divisionId = searchParams.get("divisionId");
 
-    const prismaClient = prisma as any;
-    const norms = await prismaClient.norm.findMany({
+    const norms = await prisma.norm.findMany({
       where: {
-        ...(status ? { status } : {}),
+        ...(status && status !== "all" ? { status } : {}),
         ...(regulationId ? { regulationId: Number(regulationId) } : {}),
         ...(divisionId
           ? { regulation: { divisionId: Number(divisionId) } }

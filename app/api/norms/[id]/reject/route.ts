@@ -1,3 +1,4 @@
+// app/api/norms/[id]/reject/route.ts
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 
@@ -7,14 +8,17 @@ export async function POST(
 ) {
   try {
     const { id } = await params;
+    const normId = Number(id);
 
+    // Update status norma jadi REJECTED
     const norm = await prisma.norm.update({
-      where: { id: Number(id) },
+      where: { id: normId },
       data: { status: "REJECTED" },
     });
 
+    // Update semua rules di bawah norma ini jadi REJECTED juga
     await prisma.rule.updateMany({
-      where: { normId: Number(id) },
+      where: { normId },
       data: { status: "REJECTED" },
     });
 

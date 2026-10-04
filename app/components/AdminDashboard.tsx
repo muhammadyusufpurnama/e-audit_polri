@@ -24,6 +24,7 @@ import DivisionSelector from "./admin/DivisionSelector";
 import UploadForm from "./admin/UploadForm";
 import DraftReview from "./admin/DraftReview";
 import AuditLogView from "./admin/AuditLogView";
+import MasterDataTable from "./admin/MasterDataTable";
 
 type AdminMenu =
   | "dashboard"
@@ -266,14 +267,7 @@ export default function AdminDashboard({ user }: AdminDashboardProps) {
 
               {activeMenu === "draft" && <DraftReview divisions={divisions} />}
 
-              {activeMenu === "master" && (
-                <section className="rounded-2xl border border-slate-800 bg-slate-900/60 p-6">
-                  <h2 className="text-xl font-bold text-white">Master Data</h2>
-                  <p className="mt-2 text-sm text-slate-400">
-                    Approved regulatory data will appear here.
-                  </p>
-                </section>
-              )}
+              {activeMenu === "master" && <MasterDataTable divisions={divisions} />}
 
               {activeMenu === "audit-log" && <AuditLogView />}
             </>

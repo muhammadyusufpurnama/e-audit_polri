@@ -65,14 +65,21 @@ export default function DraftReview({ divisions }: Props) {
   }, [norms, search]);
 
   const handleApprove = async (id: number) => {
-    setActionLoading(id);
     try {
-      const res = await fetch(`/api/norms/${id}/approve`, { method: "POST" });
-      if (res.ok) {
-        await fetchNorms();
+      const res = await fetch(`/api/norms/${id}/approve`, {
+        method: "PUT", // Pastikan method ini sesuai dengan rute API approve Anda
+      });
+      
+      if (!res.ok) {
+        throw new Error("Gagal menyetujui norma");
       }
-    } finally {
-      setActionLoading(null);
+
+      // Refresh data atau hapus item dari list draft di UI
+      alert("Norma berhasil disetujui dan masuk Master Data!");
+      fetchNorms(); // fungsi untuk memuat ulang data
+    } catch (err) {
+      console.error(err);
+      alert("Terjadi kesalahan saat approve norma");
     }
   };
 
